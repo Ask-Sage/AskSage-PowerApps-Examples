@@ -4,7 +4,7 @@ Thomas Cummings from the U.S. Army was kind enough to share with us and provide 
 
 ## Process AELW Emails
 
-This workflow automates the processing of emails sent to the Army Enterprise LLM Workspace (AELW) shared mailbox (usarmy.ecma.mbx.army-genai@army.mil). The flow uses Ask Sage's AI capabilities to intelligently categorize incoming emails and route them appropriately.
+This workflow automates the processing of emails sent to the Army Enterprise LLM Workspace (AELW) shared mailbox. The flow uses Ask Sage's AI capabilities to intelligently categorize incoming emails and route them appropriately.
 
 **Key Features:**
 - **Automatic Email Classification**: Uses Ask Sage's Gemini Flash model to categorize emails into predefined categories (Token Requests, Lunch and Learn Signups, Technical Support, Access Requests, Training Requests, etc.)
