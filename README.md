@@ -1,4 +1,4 @@
-# AskSage PowerApps Examples
+# Ask Sage PowerApps Examples
 
 Thomas Cummings from the U.S. Army was kind enough to share with us and provide to the open source community some examples on how he used PowerApps (Power Automate) to automate various tasks using Ask Sage.
 
