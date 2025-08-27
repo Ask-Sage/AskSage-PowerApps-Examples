@@ -1,0 +1,1374 @@
+openapi: 3.0.3
+info:
+  title: Ask Sage Server API
+  description: |
+    Ask Sage is an AI-powered completion and knowledge management API with support for embeddings, file processing, plugins, and MCP (Model Context Protocol) servers.
+
+    ## Authentication
+    All endpoints require authentication via the `x-access-tokens` header, except for `/get-models`.
+    
+    ## Message Format
+    The `message` field in API requests can be either:
+    - A single string prompt: `"What is Ask Sage?"`
+    - An array of conversation messages: `[{"user": "me", "message": "what is Ask Sage?"}, {"user": "gpt", "message": "Ask Sage is an..."}]`
+  version: 1.55
+  contact:
+    name: Ask Sage Support
+    email: support@asksage.ai
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.asksage.ai/server/
+    description: Server API server
+
+security:
+  - ApiKeyAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-access-tokens
+      description: Authentication token obtained from login
+
+  schemas:
+    Message:
+      oneOf:
+        - type: string
+          description: Single message prompt
+          example: "What is Ask Sage?"
+        - type: array
+          description: Array of conversation messages
+          items:
+            type: object
+            required:
+              - user
+              - message
+            properties:
+              user:
+                type: string
+                enum: ["me", "gpt"]
+                description: Identifies the sender of the message
+              message:
+                type: string
+                description: The content of the message
+          example:
+            - user: "me"
+              message: "What is Ask Sage?"
+            - user: "gpt"
+              message: "Ask Sage is an..."
+
+    Tool:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the tool/function
+        description:
+          type: string
+          description: Description of what the tool does
+        parameters:
+          type: object
+          description: Parameters schema for the tool
+
+    ToolChoice:
+      oneOf:
+        - type: string
+          enum: ["auto", "none", "required"]
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: ["function"]
+            function:
+              type: object
+              properties:
+                name:
+                  type: string
+
+    CompletionResponse:
+      type: object
+      properties:
+        response:
+          type: string
+          description: Status message or error description
+        message:
+          type: string
+          description: Generated completion text
+        embedding_down:
+          type: boolean
+          description: Whether embedding service is down
+        vectors_down:
+          type: boolean
+          description: Whether vector database is down
+        uuid:
+          type: string
+          description: Unique identifier for this completion
+        references:
+          type: string
+          description: References used for the completion
+        type:
+          type: string
+          description: Type of response
+        added_obj:
+          type: object
+          nullable: true
+          description: Additional object data for chained operations
+        tool_calls:
+          type: array
+          nullable: true
+          description: Tool/function calls made during completion
+        usage:
+          type: object
+          nullable: true
+          description: Token usage statistics
+        tool_responses:
+          type: array
+          nullable: true
+          description: Responses from tool executions
+        tool_calls_unified:
+          type: array
+          nullable: true
+          description: Unified tool calls format
+        status:
+          type: integer
+          description: HTTP status code
+
+    MCPServer:
+      type: object
+      required:
+        - server_name
+        - server_url
+      properties:
+        server_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          pattern: '^[a-zA-Z0-9\s\-_.]+$'
+          description: Name of the MCP server
+        server_url:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          description: HTTPS URL of the MCP server
+        server_type:
+          type: string
+          maxLength: 50
+          pattern: '^[a-zA-Z0-9\-_]+$'
+          description: Type of MCP server
+        description:
+          type: string
+          maxLength: 1000
+          description: Description of the MCP server
+        metadata_json:
+          type: string
+          description: Additional metadata in JSON format
+
+paths:
+  /get-models:
+    get:
+      summary: Get available models
+      description: Returns a list of all available AI models
+      security: []
+      tags:
+        - Models
+      responses:
+        '200':
+          description: List of available models
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: array
+                    items:
+                      type: string
+                  object:
+                    type: string
+                    example: "list"
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        object:
+                          type: string
+                          example: "model"
+                        created:
+                          type: string
+                        name:
+                          type: string
+                        owned_by:
+                          type: string
+                  status:
+                    type: integer
+                    example: 200
+
+  /query:
+    post:
+      summary: Generate completion
+      description: |
+        Main endpoint for generating AI completions. 
+        The message field can be either a string or an array of conversation messages.
+      tags:
+        - Completions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  $ref: '#/components/schemas/Message'
+                persona:
+                  type: integer
+                  description: Persona ID to use for the completion
+                  default: 1
+                tools:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Tool'
+                  description: Available tools/functions for the model to use
+                enabled_mcp_tools:
+                  type: array
+                  items:
+                    type: string
+                  description: List of enabled MCP tools
+                tools_to_execute:
+                  type: array
+                  items:
+                    type: string
+                  description: Specific tools to execute
+                tool_choice:
+                  $ref: '#/components/schemas/ToolChoice'
+                reasoning_effort:
+                  type: string
+                  enum: ["low", "medium", "high"]
+                  description: Reasoning effort level for o1/o3 models
+                system_prompt:
+                  type: string
+                  description: Custom system prompt to override persona
+                mode:
+                  type: string
+                  enum: ["chat", "deep_agent"]
+                  default: "chat"
+                  description: Completion mode
+                deep_agent_id:
+                  type: integer
+                  description: Deep agent ID for deep_agent mode
+                dataset:
+                  oneOf:
+                    - type: string
+                      description: Single dataset name or 'all'/'none'
+                    - type: array
+                      items:
+                        type: string
+                      description: Multiple dataset names
+                  default: "all"
+                limit_references:
+                  type: integer
+                  enum: [0, 1]
+                  description: Limit number of references (0=none, 1=limited)
+                temperature:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                  default: 0
+                  description: Sampling temperature
+                model:
+                  type: string
+                  description: Model to use for completion
+                  example: "gpt-4o-mini"
+                live:
+                  type: integer
+                  enum: [0, 1, 2]
+                  default: 0
+                  description: Live search mode (0=off, 1=basic, 2=advanced)
+                streaming:
+                  type: boolean
+                  default: false
+                  description: Enable streaming response
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  type: string
+                  description: |
+                    Message as JSON string. Can be either:
+                    - A single string prompt: `"What is Ask Sage?"`
+                    - An array of conversation messages: `[{"user": "me", "message": "What is Ask Sage?"}, {"user": "gpt", "message": "Ask Sage is..."}]`
+                    
+                    When sending via form data, the message must be JSON-encoded.
+                  example: '[{"user": "me", "message": "What is Ask Sage?"}, {"user": "gpt", "message": "Ask Sage is an AI platform..."}]'
+                persona:
+                  type: string
+                tools:
+                  type: string
+                  description: Tools as JSON string
+                enabled_mcp_tools:
+                  type: string
+                  description: Enabled MCP tools as JSON string
+                tools_to_execute:
+                  type: string
+                  description: Tools to execute as JSON string
+                tool_choice:
+                  type: string
+                  description: Tool choice as JSON string
+                reasoning_effort:
+                  type: string
+                system_prompt:
+                  type: string
+                mode:
+                  type: string
+                deep_agent_id:
+                  type: string
+                dataset:
+                  type: string
+                limit_references:
+                  type: string
+                temperature:
+                  type: string
+                model:
+                  type: string
+                live:
+                  type: string
+                streaming:
+                  type: string
+      responses:
+        '200':
+          description: Successful completion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompletionResponse'
+            text/plain:
+              schema:
+                type: string
+                description: Streaming response with delimiter-separated JSON chunks
+
+  /query_with_file:
+    post:
+      summary: Generate completion with file attachments
+      description: |
+        Generate AI completion with one or more file attachments. Supports multiple files.
+        Maximum file size: 500MB per file. Maximum number of files determined by server configuration.
+      tags:
+        - Completions
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                file:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: One or more files to process with the query
+                message:
+                  type: string
+                  description: |
+                    Message as JSON string. Can be either:
+                    - A single string prompt: `"What is Ask Sage?"`
+                    - An array of conversation messages: `[{"user": "me", "message": "What is Ask Sage?"}, {"user": "gpt", "message": "Ask Sage is..."}]`
+                    
+                    When sending via form data, the message must be JSON-encoded.
+                  example: '[{"user": "me", "message": "Analyze this file"}, {"user": "gpt", "message": "I will analyze the file for you..."}]'
+                persona:
+                  type: string
+                tools:
+                  type: string
+                enabled_mcp_tools:
+                  type: string
+                tools_to_execute:
+                  type: string
+                tool_choice:
+                  type: string
+                reasoning_effort:
+                  type: string
+                system_prompt:
+                  type: string
+                mode:
+                  type: string
+                deep_agent_id:
+                  type: string
+                dataset:
+                  type: string
+                limit_references:
+                  type: string
+                temperature:
+                  type: string
+                model:
+                  type: string
+                live:
+                  type: string
+                streaming:
+                  type: string
+      responses:
+        '200':
+          description: Successful completion with file processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompletionResponse'
+
+  /execute-plugin:
+    post:
+      summary: Execute a plugin
+      description: Execute a specific plugin with provided values
+      tags:
+        - Plugins
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - plugin_name
+                - plugin_values
+              properties:
+                plugin_name:
+                  type: string
+                  description: Name of the plugin to execute
+                plugin_values:
+                  type: string
+                  description: Plugin values as JSON string
+                model:
+                  type: string
+                  description: Model to use for plugin execution
+                live:
+                  type: integer
+                  enum: [0, 1, 2]
+                  default: 0
+                  description: Live mode setting
+      responses:
+        '200':
+          description: Plugin execution result (streaming)
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /execute-plugin-with-file:
+    post:
+      summary: Execute a plugin with file
+      description: Execute a plugin that requires file input
+      tags:
+        - Plugins
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - plugin_name
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File to process with the plugin
+                plugin_name:
+                  type: string
+                  description: Name of the plugin to execute
+                plugin_values:
+                  type: string
+                  description: Plugin values as JSON string (optional)
+                model:
+                  type: string
+                  description: Model to use
+                live:
+                  type: integer
+                  enum: [0, 1, 2]
+                  default: 0
+      responses:
+        '200':
+          description: Plugin execution result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompletionResponse'
+
+  /get-deep-agent:
+    post:
+      summary: Get deep agent updates
+      description: Get streaming updates from a deep agent
+      tags:
+        - Deep Agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - deep_agent_id
+              properties:
+                deep_agent_id:
+                  type: integer
+                  description: ID of the deep agent
+      responses:
+        '200':
+          description: Deep agent updates (streaming)
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /add-mcp-server:
+    post:
+      summary: Add MCP server
+      description: Add a new MCP (Model Context Protocol) server for the user
+      tags:
+        - MCP Servers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPServer'
+      responses:
+        '200':
+          description: MCP server added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  server_id:
+                    type: integer
+                  status:
+                    type: integer
+
+  /update-mcp-server:
+    put:
+      summary: Update MCP server
+      description: Update an existing MCP server configuration
+      tags:
+        - MCP Servers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - type: object
+                  required:
+                    - server_id
+                  properties:
+                    server_id:
+                      type: integer
+                      description: ID of the server to update
+                - $ref: '#/components/schemas/MCPServer'
+      responses:
+        '200':
+          description: MCP server updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  server_id:
+                    type: integer
+                  status:
+                    type: integer
+
+  /list-mcp-servers:
+    get:
+      summary: List user's MCP servers
+      description: Get a list of all MCP servers configured for the user
+      tags:
+        - MCP Servers
+      parameters:
+        - name: include_inactive
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include inactive servers in the list
+      responses:
+        '200':
+          description: List of MCP servers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: array
+                    items:
+                      type: object
+                  count:
+                    type: integer
+                  status:
+                    type: integer
+    post:
+      summary: List user's MCP servers (POST)
+      description: Get a list of all MCP servers configured for the user
+      tags:
+        - MCP Servers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                include_inactive:
+                  type: boolean
+                  default: false
+                  description: Include inactive servers
+      responses:
+        '200':
+          description: List of MCP servers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: array
+                    items:
+                      type: object
+                  count:
+                    type: integer
+                  status:
+                    type: integer
+
+  /list-mcp-whitelisted-servers:
+    get:
+      summary: List whitelisted MCP servers
+      description: Get a list of all whitelisted MCP servers
+      tags:
+        - MCP Servers
+      responses:
+        '200':
+          description: List of whitelisted servers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: array
+                    items:
+                      type: string
+                  status:
+                    type: integer
+
+  /list-mcp-tools:
+    get:
+      summary: List MCP tools
+      description: Get a list of all available MCP tools from configured servers
+      tags:
+        - MCP Servers
+      responses:
+        '200':
+          description: List of MCP tools
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: array
+                    items:
+                      type: object
+                  count:
+                    type: integer
+                  status:
+                    type: integer
+
+  /delete-mcp-server:
+    delete:
+      summary: Delete MCP server
+      description: Soft delete an MCP server by setting it as inactive
+      tags:
+        - MCP Servers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - server_id
+              properties:
+                server_id:
+                  type: integer
+                  description: ID of the server to delete
+      responses:
+        '200':
+          description: Server deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  server_id:
+                    type: integer
+                  status:
+                    type: integer
+        '404':
+          description: Server not found or access denied
+
+  /follow-up-questions:
+    post:
+      summary: Generate follow-up questions
+      description: Generate relevant follow-up questions based on the conversation
+      tags:
+        - Completions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  $ref: '#/components/schemas/Message'
+                dataset:
+                  type: string
+                  default: "all"
+                model:
+                  type: string
+                  description: Model to use
+      responses:
+        '200':
+          description: Generated follow-up questions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompletionResponse'
+
+  /tokenizer:
+    post:
+      summary: Count tokens
+      description: Get token count for provided content
+      tags:
+        - Utilities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+              properties:
+                content:
+                  type: string
+                  description: Content to tokenize
+                model:
+                  type: string
+                  default: "ada-002"
+                  description: Model to use for tokenization
+                convert_to_asksage:
+                  type: boolean
+                  default: false
+                  description: Convert to Ask Sage token format
+                completion_estimate:
+                  type: integer
+                  default: 0
+                  description: Estimated completion tokens
+      responses:
+        '200':
+          description: Token count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  status:
+                    type: integer
+
+  /get-personas:
+    get:
+      summary: Get available personas
+      description: Returns a list of available AI personas
+      tags:
+        - Configuration
+      responses:
+        '200':
+          description: List of personas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: array
+                    items:
+                      type: object
+                  status:
+                    type: integer
+
+  /get-datasets:
+    get:
+      summary: Get available datasets
+      description: Returns a list of available knowledge datasets
+      tags:
+        - Datasets
+      responses:
+        '200':
+          description: List of datasets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: array
+                    items:
+                      type: string
+                  status:
+                    type: integer
+
+  /dataset:
+    delete:
+      summary: Delete a dataset
+      description: Delete a specific dataset
+      tags:
+        - Datasets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - dataset
+              properties:
+                dataset:
+                  type: string
+                  description: Name of the dataset to delete
+      responses:
+        '200':
+          description: Dataset deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  status:
+                    type: integer
+
+  /get-plugins:
+    get:
+      summary: Get available plugins
+      description: Returns a list of available plugins
+      tags:
+        - Plugins
+      responses:
+        '200':
+          description: List of plugins
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        plugin_name:
+                          type: string
+                        title:
+                          type: string
+                        description:
+                          type: string
+                        category:
+                          type: string
+                        file_mode:
+                          type: boolean
+                        paid_only:
+                          type: boolean
+                        regex:
+                          type: string
+                          nullable: true
+                        prompt_template:
+                          type: string
+                          nullable: true
+                        fields:
+                          type: array
+                          nullable: true
+                  status:
+                    type: integer
+
+  /vote-down:
+    post:
+      summary: Vote down a response
+      description: Mark a response as unhelpful or incorrect
+      tags:
+        - Feedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - uuid
+              properties:
+                uuid:
+                  type: string
+                  description: UUID of the response to vote down
+      responses:
+        '200':
+          description: Vote recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  status:
+                    type: integer
+
+  /count-monthly-tokens:
+    get:
+      summary: Get monthly token usage
+      description: Returns the count of tokens used this month
+      tags:
+        - Usage
+      responses:
+        '200':
+          description: Token count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: integer
+                  status:
+                    type: integer
+    post:
+      summary: Get monthly token usage
+      description: Returns the count of tokens used this month for specific app
+      tags:
+        - Usage
+      responses:
+        '200':
+          description: Token count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: integer
+                  status:
+                    type: integer
+
+  /count-monthly-teach-tokens:
+    get:
+      summary: Get monthly teaching token usage
+      description: Returns the count of teaching/training tokens used this month
+      tags:
+        - Usage
+      responses:
+        '200':
+          description: Teaching token count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: integer
+                  status:
+                    type: integer
+
+  /train:
+    post:
+      summary: Train the model
+      description: Add new content to the knowledge base
+      tags:
+        - Training
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+              properties:
+                content:
+                  type: string
+                  description: Content to train/ingest
+                context:
+                  type: string
+                  description: Additional context for the content
+                skip_vectordb:
+                  type: boolean
+                  default: false
+                  description: Skip adding to vector database
+                force_dataset:
+                  type: string
+                  description: Force specific dataset for training
+      responses:
+        '200':
+          description: Training successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  embedding:
+                    type: string
+                  status:
+                    type: integer
+
+  /train-with-file:
+    post:
+      summary: Train with file
+      description: Train the model using file content
+      tags:
+        - Training
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File to train from
+                dataset:
+                  type: string
+                  description: Dataset to add content to
+      responses:
+        '200':
+          description: File training successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  embedding:
+                    type: array
+                    items:
+                      type: string
+                  status:
+                    type: integer
+
+  /train-with-array:
+    post:
+      summary: Train with array of data
+      description: Train the model using an array of content
+      tags:
+        - Training
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - data
+                - dataset
+              properties:
+                data:
+                  type: string
+                  description: JSON array of data to train
+                dataset:
+                  type: string
+                  description: Dataset name
+                context:
+                  type: string
+                  description: Additional context
+                filename:
+                  type: string
+                  description: Source filename
+      responses:
+        '200':
+          description: Array training successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  embedding:
+                    type: array
+                    items:
+                      type: array
+                      items:
+                        type: string
+                  status:
+                    type: integer
+
+  /delete-filename-from-dataset:
+    post:
+      summary: Delete file from dataset
+      description: Remove a specific file from a dataset
+      tags:
+        - Datasets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - dataset
+                - filename
+              properties:
+                dataset:
+                  type: string
+                  description: Dataset name
+                filename:
+                  type: string
+                  description: Filename to delete
+      responses:
+        '200':
+          description: File deleted from dataset
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  status:
+                    type: integer
+
+  /get-all-files-ingested:
+    post:
+      summary: Get all ingested files
+      description: Returns a list of all files that have been ingested
+      tags:
+        - Datasets
+      responses:
+        '200':
+          description: List of ingested files
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: array
+                    items:
+                      type: object
+                  status:
+                    type: integer
+
+  /copy-files-dataset:
+    post:
+      summary: Copy files to dataset
+      description: Copy files from one dataset to another
+      tags:
+        - Datasets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - dataset
+                - files
+              properties:
+                dataset:
+                  type: string
+                  description: Target dataset name
+                files:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      filename:
+                        type: string
+                      source_string:
+                        type: string
+                  description: Files to copy
+      responses:
+        '200':
+          description: Files copied successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: array
+                    items:
+                      type: string
+                  status:
+                    type: integer
+
+  /get-secrets:
+    get:
+      summary: Get user secrets
+      description: Returns a list of user's stored secrets (keys only, not values)
+      tags:
+        - Secrets
+      responses:
+        '200':
+          description: List of secret names
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: array
+                    items:
+                      type: string
+                  status:
+                    type: integer
+
+  /get-text-to-speech:
+    post:
+      summary: Convert text to speech
+      description: Generate audio from text using text-to-speech
+      tags:
+        - Audio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+              properties:
+                text:
+                  type: string
+                  description: Text to convert to speech
+                voice:
+                  type: string
+                  default: "alloy"
+                  description: Voice to use for speech
+                model:
+                  type: string
+                  default: "tts-hd"
+                  description: TTS model to use
+      responses:
+        '200':
+          description: Audio file
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+
+  /file:
+    post:
+      summary: Process and analyze file
+      description: Upload a file for processing and text extraction
+      tags:
+        - Files
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File to process
+                strategy:
+                  type: string
+                  enum: ["auto", "fast", "hi_res"]
+                  default: "auto"
+                  description: Processing strategy
+                special_csv:
+                  type: boolean
+                  default: false
+                  description: Special CSV processing mode
+      responses:
+        '200':
+          description: File processed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  ret:
+                    type: object
+                    description: Extracted content
+                  sent_filename:
+                    type: string
+                  status:
+                    type: integer
+
+tags:
+  - name: Models
+    description: AI model management
+  - name: Completions
+    description: Text generation and completions
+  - name: Plugins
+    description: Plugin execution and management
+  - name: Deep Agent
+    description: Deep agent operations
+  - name: MCP Servers
+    description: Model Context Protocol server management
+  - name: Configuration
+    description: System configuration endpoints
+  - name: Datasets
+    description: Knowledge dataset management
+  - name: Feedback
+    description: User feedback operations
+  - name: Usage
+    description: Token usage tracking
+  - name: Training
+    description: Model training and content ingestion
+  - name: Secrets
+    description: Secret management
+  - name: Audio
+    description: Audio processing (TTS/STT)
+  - name: Files
+    description: File processing and analysis
+  - name: Utilities
+    description: Utility endpoints

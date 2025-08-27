@@ -1,0 +1,1473 @@
+swagger: '2.0'
+info:
+  title: Ask Sage Server API
+  description: >-
+    Ask Sage is an AI-powered completion and knowledge management API with support for embeddings, 
+    file processing, plugins, and MCP (Model Context Protocol) servers.
+    
+    ## Authentication
+    All endpoints require authentication via the `x-access-tokens` header, except for `/get-models`.
+    
+    ## Message Format
+    The `message` field in API requests can be either:
+    - A single string prompt: `"What is Ask Sage?"`
+    - An array of conversation messages: `[{"user": "me", "message": "what is Ask Sage?"}, {"user": "gpt", "message": "Ask Sage is an..."}]`
+  version: '1.55'
+  contact:
+    name: Ask Sage Support
+    email: support@asksage.ai
+# Army-specific Ask Sage API endpoint for A365 environment
+host: api-a365.army.asksage.ai
+basePath: /server
+schemes:
+  - https
+consumes: []
+produces: []
+
+paths:
+  # Main query endpoint for text-based interactions with Ask Sage LLMs
+  /query:
+    post:
+      responses:
+        '200':
+          description: Successful completion
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Status message or error description
+              message:
+                type: string
+                description: Generated completion text
+              embedding_down:
+                type: boolean
+                description: Whether embedding service is down
+              vectors_down:
+                type: boolean
+                description: Whether vector database is down
+              uuid:
+                type: string
+                description: Unique identifier for this completion
+              references:
+                type: string
+                description: References used for the completion
+              type:
+                type: string
+                description: Type of response
+              added_obj:
+                type: object
+                description: Additional object data for chained operations
+              tool_calls:
+                type: array
+                items:
+                  type: object
+                description: Tool/function calls made during completion
+              usage:
+                type: object
+                description: Token usage statistics
+              tool_responses:
+                type: array
+                items:
+                  type: object
+                description: Responses from tool executions
+              tool_calls_unified:
+                type: array
+                items:
+                  type: object
+                description: Unified tool calls format
+              teach:
+                type: boolean
+                description: Indicates if this interaction can be used for model improvement
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+        '400':
+          description: Error response
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Error message describing what went wrong
+              status:
+                type: integer
+                format: int32
+                description: HTTP error status code
+      summary: Generate AI Completion
+      description: Main endpoint for generating AI completions. The message field can be either a string or an array of conversation messages.
+      operationId: QueryAskSage
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - message
+            properties:
+              message:
+                type: string
+                description: Message prompt or JSON array of conversation messages
+                title: Message
+                default: ''
+              persona:
+                type: integer
+                format: int32
+                description: Persona ID to use for the completion
+                title: Persona
+                default: 1
+              tools:
+                type: array
+                items:
+                  type: object
+                description: Available tools/functions for the model to use
+              enabled_mcp_tools:
+                type: array
+                items:
+                  type: string
+                description: List of enabled MCP tools
+              tools_to_execute:
+                type: array
+                items:
+                  type: string
+                description: Specific tools to execute
+              tool_choice:
+                type: string
+                description: Tool choice strategy (auto, none, required, or specific function)
+              reasoning_effort:
+                type: string
+                description: Reasoning effort level for o1/o3 models (low, medium, high)
+                enum: ["low", "medium", "high"]
+              system_prompt:
+                type: string
+                description: Custom system prompt to override persona
+                title: System Prompt
+              mode:
+                type: string
+                description: Completion mode (chat or deep_agent)
+                enum: ["chat", "deep_agent"]
+                default: "chat"
+              deep_agent_id:
+                type: integer
+                format: int32
+                description: Deep agent ID for deep_agent mode
+              dataset:
+                type: string
+                description: Dataset name(s) - can be single name, 'all', 'none', or comma-separated list
+                title: Dataset
+                default: "all"
+              limit_references:
+                type: integer
+                format: int32
+                description: Limit number of references (0=none, 1=limited)
+                enum: [0, 1]
+                default: 0
+              temperature:
+                type: number
+                format: float
+                description: Sampling temperature (0-1, 0=deterministic, higher=more creative)
+                minimum: 0
+                maximum: 1
+                default: 0
+              model:
+                type: string
+                description: Specific AI model to use (e.g., "gpt-4o-mini", "gpt-4o", "o1-preview")
+                title: Model
+                default: "gpt-4o-mini"
+              live:
+                type: integer
+                format: int32
+                description: Live search mode (0=off, 1=basic, 2=advanced)
+                enum: [0, 1, 2]
+                default: 0
+              streaming:
+                type: boolean
+                description: Enable streaming response
+                default: false
+      x-ms-visibility: important
+
+  # Query endpoint that accepts file uploads along with text queries
+  /query_with_file:
+    post:
+      responses:
+        '200':
+          description: Successful completion with file processing
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Status message or error description
+              message:
+                type: string
+                description: Generated completion text based on file content
+              embedding_down:
+                type: boolean
+                description: Status of embedding service
+              vectors_down:
+                type: boolean
+                description: Status of vector database
+              uuid:
+                type: string
+                description: Unique session identifier
+              references:
+                type: string
+                description: Citations from the file and other sources
+              type:
+                type: string
+                description: Type of response
+              added_obj:
+                type: object
+                description: Additional object data
+              tool_calls:
+                type: array
+                items:
+                  type: object
+                description: Tool calls made
+              usage:
+                type: object
+                description: Token usage statistics
+              tool_responses:
+                type: array
+                items:
+                  type: object
+                description: Tool execution responses
+              tool_calls_unified:
+                type: array
+                items:
+                  type: object
+                description: Unified tool calls
+              teach:
+                type: boolean
+                description: Training eligibility flag
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+        '400':
+          description: Error response
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Error description
+              status:
+                type: integer
+                format: int32
+                description: HTTP error code
+      summary: Query with File Attachments
+      description: Generate AI completion with one or more file attachments. Maximum file size 500MB per file.
+      consumes:
+        - multipart/form-data
+      parameters:
+        - name: Accept
+          in: header
+          required: true
+          type: string
+          default: application/*
+          x-ms-visibility: internal
+        - name: file
+          in: formData
+          type: file
+          description: One or more files to process with the query (max 500MB each)
+        - name: message
+          type: string
+          in: formData
+          description: Message prompt or JSON array of conversation messages
+        - name: persona
+          type: string
+          in: formData
+          description: Persona ID to use for response style
+        - name: tools
+          type: string
+          in: formData
+          description: Tools as JSON string
+        - name: enabled_mcp_tools
+          type: string
+          in: formData
+          description: Enabled MCP tools as JSON string
+        - name: tools_to_execute
+          type: string
+          in: formData
+          description: Tools to execute as JSON string
+        - name: tool_choice
+          type: string
+          in: formData
+          description: Tool choice as JSON string
+        - name: reasoning_effort
+          type: string
+          in: formData
+          description: Reasoning effort level (low, medium, high)
+        - name: system_prompt
+          type: string
+          in: formData
+          description: Custom system instructions
+        - name: mode
+          type: string
+          in: formData
+          description: Completion mode (chat or deep_agent)
+        - name: deep_agent_id
+          type: string
+          in: formData
+          description: Deep agent ID
+        - name: dataset
+          type: string
+          in: formData
+          description: Dataset to include in context
+        - name: limit_references
+          type: string
+          in: formData
+          description: Max number of references to return (0 or 1)
+        - name: temperature
+          type: string
+          in: formData
+          description: Response randomness control (0-1)
+        - name: live
+          type: string
+          in: formData
+          description: Enable live data access (0, 1, or 2)
+        - name: model
+          type: string
+          in: formData
+          description: Specific model selection
+        - name: streaming
+          type: string
+          in: formData
+          description: Enable streaming (true/false)
+      operationId: QueryWithFile
+      x-ms-visibility: important
+
+  # Execute a plugin
+  /execute-plugin:
+    post:
+      responses:
+        '200':
+          description: Plugin execution result
+          schema:
+            type: string
+            description: Streaming response
+      summary: Execute Plugin
+      description: Execute a specific plugin with provided values
+      consumes:
+        - multipart/form-data
+      parameters:
+        - name: plugin_name
+          in: formData
+          type: string
+          required: true
+          description: Name of the plugin to execute
+        - name: plugin_values
+          in: formData
+          type: string
+          required: true
+          description: Plugin values as JSON string
+        - name: model
+          in: formData
+          type: string
+          description: Model to use for plugin execution
+        - name: live
+          in: formData
+          type: integer
+          format: int32
+          description: Live mode setting (0, 1, or 2)
+      operationId: ExecutePlugin
+      x-ms-visibility: advanced
+
+  # Execute plugin with file
+  /execute-plugin-with-file:
+    post:
+      responses:
+        '200':
+          description: Plugin execution result
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Plugin execution response
+              message:
+                type: string
+                description: Generated message
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Execute Plugin with File
+      description: Execute a plugin that requires file input
+      consumes:
+        - multipart/form-data
+      parameters:
+        - name: Accept
+          in: header
+          required: true
+          type: string
+          default: application/*
+          x-ms-visibility: internal
+        - name: file
+          in: formData
+          type: file
+          required: true
+          description: File to process with the plugin
+        - name: plugin_name
+          in: formData
+          type: string
+          required: true
+          description: Name of the plugin to execute
+        - name: plugin_values
+          in: formData
+          type: string
+          description: Plugin values as JSON string (optional)
+        - name: model
+          in: formData
+          type: string
+          description: Model to use
+        - name: live
+          in: formData
+          type: integer
+          format: int32
+          description: Live mode (0, 1, or 2)
+      operationId: ExecutePluginWithFile
+      x-ms-visibility: advanced
+
+  # Get deep agent updates
+  /get-deep-agent:
+    post:
+      responses:
+        '200':
+          description: Deep agent updates
+          schema:
+            type: string
+            description: Streaming updates
+      summary: Get Deep Agent Updates
+      description: Get streaming updates from a deep agent
+      operationId: GetDeepAgent
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - deep_agent_id
+            properties:
+              deep_agent_id:
+                type: integer
+                format: int32
+                description: ID of the deep agent
+      x-ms-visibility: advanced
+
+  # MCP Server Management
+  /add-mcp-server:
+    post:
+      responses:
+        '200':
+          description: MCP server added successfully
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Success message
+              server_id:
+                type: integer
+                format: int32
+                description: ID of the created server
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Add MCP Server
+      description: Add a new MCP (Model Context Protocol) server for the user
+      operationId: AddMCPServer
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - server_name
+              - server_url
+            properties:
+              server_name:
+                type: string
+                description: Name of the MCP server (alphanumeric, spaces, hyphens, underscores, dots)
+                minLength: 1
+                maxLength: 100
+              server_url:
+                type: string
+                description: HTTPS URL of the MCP server
+                minLength: 1
+                maxLength: 2048
+              server_type:
+                type: string
+                description: Type of MCP server
+                maxLength: 50
+              description:
+                type: string
+                description: Description of the MCP server
+                maxLength: 1000
+              metadata_json:
+                type: string
+                description: Additional metadata in JSON format
+      x-ms-visibility: advanced
+
+  /update-mcp-server:
+    put:
+      responses:
+        '200':
+          description: MCP server updated successfully
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Success message
+              server_id:
+                type: integer
+                format: int32
+                description: ID of the updated server
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Update MCP Server
+      description: Update an existing MCP server configuration
+      operationId: UpdateMCPServer
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - server_id
+              - server_name
+              - server_url
+            properties:
+              server_id:
+                type: integer
+                format: int32
+                description: ID of the server to update
+              server_name:
+                type: string
+                description: Name of the MCP server
+              server_url:
+                type: string
+                description: HTTPS URL of the MCP server
+              server_type:
+                type: string
+                description: Type of MCP server
+              description:
+                type: string
+                description: Description of the MCP server
+              metadata_json:
+                type: string
+                description: Additional metadata in JSON format
+      x-ms-visibility: advanced
+
+  /list-mcp-servers:
+    post:
+      responses:
+        '200':
+          description: List of MCP servers
+          schema:
+            type: object
+            properties:
+              response:
+                type: array
+                items:
+                  type: object
+                description: Array of MCP server objects
+              count:
+                type: integer
+                format: int32
+                description: Total count of servers
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: List MCP Servers
+      description: Get a list of all MCP servers configured for the user
+      operationId: ListMCPServers
+      parameters:
+        - name: body
+          in: body
+          required: false
+          schema:
+            type: object
+            properties:
+              include_inactive:
+                type: boolean
+                description: Include inactive servers in the list
+                default: false
+      x-ms-visibility: advanced
+
+  /list-mcp-whitelisted-servers:
+    get:
+      responses:
+        '200':
+          description: List of whitelisted servers
+          schema:
+            type: object
+            properties:
+              response:
+                type: array
+                items:
+                  type: string
+                description: Array of whitelisted server URLs
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: List Whitelisted MCP Servers
+      description: Get a list of all whitelisted MCP servers
+      operationId: ListMCPWhitelistedServers
+      parameters: []
+      x-ms-visibility: advanced
+
+  /list-mcp-tools:
+    get:
+      responses:
+        '200':
+          description: List of MCP tools
+          schema:
+            type: object
+            properties:
+              response:
+                type: array
+                items:
+                  type: object
+                description: Array of MCP tool objects
+              count:
+                type: integer
+                format: int32
+                description: Total count of tools
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: List MCP Tools
+      description: Get a list of all available MCP tools from configured servers
+      operationId: ListMCPTools
+      parameters: []
+      x-ms-visibility: advanced
+
+  /delete-mcp-server:
+    delete:
+      responses:
+        '200':
+          description: Server deleted successfully
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Success message
+              server_id:
+                type: integer
+                format: int32
+                description: ID of deleted server
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+        '404':
+          description: Server not found or access denied
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Error message
+              status:
+                type: integer
+                format: int32
+                description: HTTP error code
+      summary: Delete MCP Server
+      description: Soft delete an MCP server by setting it as inactive
+      operationId: DeleteMCPServer
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - server_id
+            properties:
+              server_id:
+                type: integer
+                format: int32
+                description: ID of the server to delete
+      x-ms-visibility: advanced
+
+  # Follow-up questions generation
+  /follow-up-questions:
+    post:
+      responses:
+        '200':
+          description: Generated follow-up questions
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Status message
+              message:
+                type: string
+                description: Generated follow-up questions
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Generate Follow-up Questions
+      description: Generate relevant follow-up questions based on the conversation
+      operationId: FollowUpQuestions
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - message
+            properties:
+              message:
+                type: string
+                description: Message or conversation array as JSON string
+              dataset:
+                type: string
+                description: Dataset to use
+                default: "all"
+              model:
+                type: string
+                description: Model to use for generation
+      x-ms-visibility: advanced
+
+  # Token counting
+  /tokenizer:
+    post:
+      responses:
+        '200':
+          description: Token count
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Token count information
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Count Tokens
+      description: Get token count for provided content
+      operationId: Tokenizer
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - content
+            properties:
+              content:
+                type: string
+                description: Content to tokenize
+              model:
+                type: string
+                description: Model to use for tokenization
+                default: "ada-002"
+              convert_to_asksage:
+                type: boolean
+                description: Convert to Ask Sage token format
+                default: false
+              completion_estimate:
+                type: integer
+                format: int32
+                description: Estimated completion tokens
+                default: 0
+      x-ms-visibility: advanced
+
+  # Get available personas
+  /get-personas:
+    get:
+      responses:
+        '200':
+          description: List of personas
+          schema:
+            type: object
+            properties:
+              response:
+                type: array
+                items:
+                  type: object
+                description: Array of persona objects
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Get Available Personas
+      description: Returns a list of available AI personas
+      operationId: GetPersonas
+      parameters: []
+      x-ms-visibility: advanced
+
+  # Training endpoint for adding file content to a dataset
+  /train-with-file:
+    post:
+      responses:
+        '200':
+          description: File training successful
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Success message confirming training completion
+              embedding:
+                type: array
+                items:
+                  type: string
+                description: Generated embeddings
+              status:
+                type: integer
+                format: int32
+                description: HTTP success code
+        '400':
+          description: Training failed
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Error message if training fails
+              status:
+                type: integer
+                format: int32
+                description: HTTP error code
+      summary: Train Dataset with File
+      description: Train the model using file content and add to a specific dataset
+      consumes:
+        - multipart/form-data
+      parameters:
+        - name: Accept
+          in: header
+          required: true
+          type: string
+          default: application/*
+          x-ms-visibility: internal
+        - name: file
+          in: formData
+          type: file
+          required: true
+          description: File containing training data
+        - name: dataset
+          type: string
+          in: formData
+          description: Target dataset name (alphanumeric only, no spaces)
+      operationId: TrainWithFile
+      x-ms-visibility: important
+
+  # Train with content
+  /train:
+    post:
+      responses:
+        '200':
+          description: Training successful
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Success message
+              embedding:
+                type: string
+                description: Generated embedding
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Train Model
+      description: Add new content to the knowledge base
+      operationId: Train
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - content
+            properties:
+              content:
+                type: string
+                description: Content to train/ingest
+              context:
+                type: string
+                description: Additional context for the content
+              skip_vectordb:
+                type: boolean
+                description: Skip adding to vector database
+                default: false
+              force_dataset:
+                type: string
+                description: Force specific dataset for training
+      x-ms-visibility: advanced
+
+  # Train with array
+  /train-with-array:
+    post:
+      responses:
+        '200':
+          description: Array training successful
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Success message
+              embedding:
+                type: array
+                items:
+                  type: array
+                  items:
+                    type: string
+                description: Generated embeddings
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Train with Array
+      description: Train the model using an array of content
+      consumes:
+        - multipart/form-data
+      parameters:
+        - name: data
+          in: formData
+          type: string
+          required: true
+          description: JSON array of data to train
+        - name: dataset
+          in: formData
+          type: string
+          required: true
+          description: Dataset name
+        - name: context
+          in: formData
+          type: string
+          description: Additional context
+        - name: filename
+          in: formData
+          type: string
+          description: Source filename
+      operationId: TrainWithArray
+      x-ms-visibility: advanced
+
+  # Retrieves list of available datasets for the authenticated user
+  /get-datasets:
+    post:
+      responses:
+        '200':
+          description: A list of datasets
+          schema:
+            type: object
+            properties:
+              response:
+                type: array
+                items:
+                  type: string
+                description: Array of dataset names in format user_custom_USERID_DATASETNAME_content
+              status:
+                type: integer
+                format: int32
+                description: HTTP success code
+        '400':
+          description: Error retrieving datasets
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Error message
+              status:
+                type: integer
+                format: int32
+                description: HTTP error code
+      summary: Get Datasets
+      description: Returns a list of available knowledge datasets for the authenticated user
+      operationId: GetDataSets
+      parameters: []
+      x-ms-visibility: important
+
+  # Delete a dataset
+  /dataset:
+    delete:
+      responses:
+        '200':
+          description: Dataset deleted
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Success message
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Delete Dataset
+      description: Delete a specific dataset
+      operationId: DeleteDataset
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - dataset
+            properties:
+              dataset:
+                type: string
+                description: Name of the dataset to delete
+      x-ms-visibility: advanced
+
+  # Retrieves list of available AI models for the tenant
+  /get-models:
+    post:
+      responses:
+        '200':
+          description: List of available models
+          schema:
+            type: object
+            properties:
+              data:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    created:
+                      type: string
+                      description: Timestamp when model was added
+                    id:
+                      type: string
+                      description: Unique model identifier
+                    name:
+                      type: string
+                      description: Human-readable model name
+                    object:
+                      type: string
+                      description: Object type (usually "model")
+                    owned_by:
+                      type: string
+                      description: Organization that owns the model
+                description: Array of model objects
+              object:
+                type: string
+                description: Response object type
+              response:
+                type: array
+                items:
+                  type: string
+                description: Simple array of model names
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Get Models
+      description: Returns a list of available AI models
+      operationId: GetModels
+      parameters: []
+      x-ms-visibility: important
+
+  # Get available plugins
+  /get-plugins:
+    get:
+      responses:
+        '200':
+          description: List of plugins
+          schema:
+            type: object
+            properties:
+              response:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      description: Plugin ID
+                    plugin_name:
+                      type: string
+                      description: Internal plugin name
+                    title:
+                      type: string
+                      description: Display title
+                    description:
+                      type: string
+                      description: Plugin description
+                    category:
+                      type: string
+                      description: Plugin category
+                    file_mode:
+                      type: boolean
+                      description: Whether plugin requires file input
+                    paid_only:
+                      type: boolean
+                      description: Whether plugin is paid-only
+                    regex:
+                      type: string
+                      description: Regex pattern for plugin
+                    prompt_template:
+                      type: string
+                      description: Prompt template
+                    fields:
+                      type: array
+                      items:
+                        type: object
+                      description: Plugin fields configuration
+                description: Array of plugin objects
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Get Available Plugins
+      description: Returns a list of available plugins
+      operationId: GetPlugins
+      parameters: []
+      x-ms-visibility: advanced
+
+  # Removes a specific file from a dataset
+  /delete-filename-from-dataset:
+    post:
+      responses:
+        '200':
+          description: File deleted from dataset
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Success confirmation message
+              status:
+                type: integer
+                format: int32
+                description: HTTP success code
+        '400':
+          description: Deletion failed
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Error message explaining failure
+              status:
+                type: integer
+                format: int32
+                description: HTTP error code
+      summary: Delete File from Dataset
+      description: Remove a specific file from a dataset
+      operationId: DeleteFilenameFromDataSet
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - dataset
+              - filename
+            properties:
+              dataset:
+                type: string
+                description: Full dataset name (user_custom_USERID_DATASETNAME_content)
+              filename:
+                type: string
+                description: Name of the file to delete from the dataset
+      x-ms-visibility: advanced
+
+  # Get all ingested files
+  /get-all-files-ingested:
+    post:
+      responses:
+        '200':
+          description: List of ingested files
+          schema:
+            type: object
+            properties:
+              response:
+                type: array
+                items:
+                  type: object
+                description: Array of file objects
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Get All Ingested Files
+      description: Returns a list of all files that have been ingested
+      operationId: GetAllFilesIngested
+      parameters: []
+      x-ms-visibility: advanced
+
+  # Copy files between datasets
+  /copy-files-dataset:
+    post:
+      responses:
+        '200':
+          description: Files copied successfully
+          schema:
+            type: object
+            properties:
+              response:
+                type: array
+                items:
+                  type: string
+                description: List of copied files
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Copy Files to Dataset
+      description: Copy files from one dataset to another
+      operationId: CopyFilesDataset
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - dataset
+              - files
+            properties:
+              dataset:
+                type: string
+                description: Target dataset name
+              files:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    filename:
+                      type: string
+                      description: File name
+                    source_string:
+                      type: string
+                      description: Source dataset
+                description: Files to copy
+      x-ms-visibility: advanced
+
+  # Vote down a response
+  /vote-down:
+    post:
+      responses:
+        '200':
+          description: Vote recorded
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Confirmation message
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Vote Down Response
+      description: Mark a response as unhelpful or incorrect
+      operationId: VoteDown
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - uuid
+            properties:
+              uuid:
+                type: string
+                description: UUID of the response to vote down
+      x-ms-visibility: advanced
+
+  # Get monthly token usage
+  /count-monthly-tokens:
+    post:
+      responses:
+        '200':
+          description: Token count
+          schema:
+            type: object
+            properties:
+              response:
+                type: integer
+                format: int32
+                description: Number of tokens used
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Get Monthly Token Usage
+      description: Returns the count of tokens used this month
+      operationId: CountMonthlyTokens
+      parameters: []
+      x-ms-visibility: advanced
+
+  # Get monthly teaching token usage
+  /count-monthly-teach-tokens:
+    get:
+      responses:
+        '200':
+          description: Teaching token count
+          schema:
+            type: object
+            properties:
+              response:
+                type: integer
+                format: int32
+                description: Number of teaching tokens used
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Get Monthly Teaching Token Usage
+      description: Returns the count of teaching/training tokens used this month
+      operationId: CountMonthlyTeachTokens
+      parameters: []
+      x-ms-visibility: advanced
+
+  # Get user secrets
+  /get-secrets:
+    get:
+      responses:
+        '200':
+          description: List of secret names
+          schema:
+            type: object
+            properties:
+              response:
+                type: array
+                items:
+                  type: string
+                description: Array of secret names (keys only, not values)
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Get User Secrets
+      description: Returns a list of user's stored secrets (keys only, not values)
+      operationId: GetSecrets
+      parameters: []
+      x-ms-visibility: advanced
+
+  # Text to speech
+  /get-text-to-speech:
+    post:
+      responses:
+        '200':
+          description: Audio file
+          schema:
+            type: string
+            format: binary
+      summary: Convert Text to Speech
+      description: Generate audio from text using text-to-speech
+      operationId: GetTextToSpeech
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - text
+            properties:
+              text:
+                type: string
+                description: Text to convert to speech
+              voice:
+                type: string
+                description: Voice to use for speech
+                default: "alloy"
+                enum: ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
+              model:
+                type: string
+                description: TTS model to use
+                default: "tts-hd"
+                enum: ["tts", "tts-hd"]
+      produces:
+        - audio/mpeg
+      x-ms-visibility: advanced
+
+  # Process and analyze file
+  /file:
+    post:
+      responses:
+        '200':
+          description: File processed successfully
+          schema:
+            type: object
+            properties:
+              response:
+                type: string
+                description: Processing status
+              ret:
+                type: object
+                description: Extracted content
+              sent_filename:
+                type: string
+                description: Processed filename
+              status:
+                type: integer
+                format: int32
+                description: HTTP status code
+      summary: Process and Analyze File
+      description: Upload a file for processing and text extraction
+      consumes:
+        - multipart/form-data
+      parameters:
+        - name: Accept
+          in: header
+          required: true
+          type: string
+          default: application/*
+          x-ms-visibility: internal
+        - name: file
+          in: formData
+          type: file
+          required: true
+          description: File to process
+        - name: strategy
+          in: formData
+          type: string
+          description: Processing strategy
+          enum: ["auto", "fast", "hi_res"]
+          default: "auto"
+        - name: special_csv
+          in: formData
+          type: boolean
+          description: Special CSV processing mode
+          default: false
+      operationId: ProcessFile
+      x-ms-visibility: advanced
+
+definitions: {}
+parameters: {}
+responses: {}
+
+# Security configuration for API authentication
+securityDefinitions:
+  api_key:
+    type: apiKey
+    in: header
+    name: x-access-tokens
+    description: Authentication token obtained from login (24-hour token or API key)
+security:
+  - api_key: []
+tags: []

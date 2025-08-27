@@ -1,0 +1,1586 @@
+openapi: 3.0.0
+info:
+  title: Ask Sage User API
+  version: 1.21
+  description: Ask Sage platform API for user management, datasets, and administrative functions
+  contact:
+    name: Ask Sage Support
+    email: support@asksage.ai
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.asksage.ai/user/
+    description: User API server
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: JWT token in x-access-tokens header
+      
+  schemas:
+    Dataset:
+      type: object
+      properties:
+        dataset:
+          type: string
+        classification:
+          type: string
+          enum: [Unclassified, CUI]
+        permissions:
+          type: string
+          enum: [read, edit, admin, owner]
+
+    Organization:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        point_contact:
+          type: string
+        address:
+          type: string
+        zip:
+          type: string
+        city:
+          type: string
+        country:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        domainname:
+          type: string
+        force_models:
+          type: string
+        settings:
+          type: string
+
+    OrganizationPurchase:
+      type: object
+      properties:
+        id:
+          type: integer
+        organization_id:
+          type: integer
+        date_purchase:
+          type: string
+          format: date-time
+        email_payer:
+          type: string
+        payer_comment:
+          type: string
+        total_tokens:
+          type: integer
+          format: int64
+        total_training_tokens:
+          type: integer
+          format: int64
+        expiration:
+          type: string
+          format: date-time
+
+paths:
+  /get-token-with-api-key:
+    post:
+      summary: Get token using API key
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - api_key
+              properties:
+                email:
+                  type: string
+                  format: email
+                api_key:
+                  type: string
+                  minLength: 64
+                  maxLength: 64
+      responses:
+        '200':
+          description: Token generated successfully
+
+  # Chat Management Endpoints
+  /get-chats:
+    post:
+      summary: Get all chat sessions for user
+      tags:
+        - Chat Management
+      responses:
+        '200':
+          description: Chat sessions retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                    description: JSON string containing chats and buttons arrays
+
+  /get-chat-session:
+    post:
+      summary: Get specific chat session
+      tags:
+        - Chat Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - session_id
+              properties:
+                session_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Chat session retrieved
+
+  /delete-chat-session:
+    post:
+      summary: Delete chat session
+      tags:
+        - Chat Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - session_id
+              properties:
+                session_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Chat session deleted
+
+  # Dataset Management
+  /add-dataset:
+    post:
+      summary: Add dataset to user
+      tags:
+        - Dataset Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - dataset
+              properties:
+                dataset:
+                  type: string
+                  minLength: 4
+                  maxLength: 100
+                classification:
+                  type: string
+                  enum: [Unclassified, CUI]
+      responses:
+        '200':
+          description: Dataset added
+
+  /delete-dataset:
+    post:
+      summary: Delete dataset
+      tags:
+        - Dataset Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - dataset
+              properties:
+                dataset:
+                  type: string
+      responses:
+        '200':
+          description: Dataset deleted
+
+  /assign-dataset:
+    post:
+      summary: Assign dataset to user
+      tags:
+        - Dataset Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - dataset
+                - email
+              properties:
+                dataset:
+                  type: string
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Dataset assigned
+
+  /deassign-dataset:
+    post:
+      summary: Remove dataset from user
+      tags:
+        - Dataset Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - dataset
+                - email
+              properties:
+                dataset:
+                  type: string
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Dataset deassigned
+
+  /update-permission-dataset:
+    post:
+      summary: Update dataset permissions
+      tags:
+        - Dataset Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - dataset
+                - email
+              properties:
+                dataset:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                permissions:
+                  type: string
+                  enum: [read, edit, admin]
+                  default: read
+      responses:
+        '200':
+          description: Permissions updated
+
+  /get-datasets-with-permissions:
+    post:
+      summary: Get user datasets with permissions
+      tags:
+        - Dataset Management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                check_permissions:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: Datasets retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Dataset'
+
+  /get-user-logs:
+    post:
+      summary: Get user activity logs
+      tags:
+        - User Information
+      responses:
+        '200':
+          description: Logs retrieved
+
+  /get-user-logins:
+    post:
+      summary: Get user login history
+      tags:
+        - User Information
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  default: 5
+      responses:
+        '200':
+          description: Login history retrieved
+
+  # API Key Management
+  /get-user-api-keys:
+    post:
+      summary: Get user API keys
+      tags:
+        - API Key Management
+      responses:
+        '200':
+          description: API keys retrieved
+
+  /user-api-key:
+    post:
+      summary: Create new API key
+      tags:
+        - API Key Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+      responses:
+        '200':
+          description: API key created
+    
+    delete:
+      summary: Delete API key
+      tags:
+        - API Key Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+              properties:
+                id:
+                  type: integer
+      responses:
+        '200':
+          description: API key deleted
+
+  # Admin Endpoints
+  /admin-total-purchased-tokens-organization:
+    post:
+      summary: Get total purchased tokens for organization
+      tags:
+        - Admin
+      responses:
+        '200':
+          description: Token information retrieved
+
+  /admin-used-tokens-for-organization:
+    post:
+      summary: Get used tokens for organization
+      tags:
+        - Admin
+      responses:
+        '200':
+          description: Used tokens retrieved
+
+  /admin-get-dataset:
+    post:
+      summary: Get datasets for user (admin)
+      tags:
+        - Admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Datasets retrieved
+
+  /admin-export-users-csv:
+    post:
+      summary: Export organization users to CSV
+      tags:
+        - Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /admin-update-user-verified:
+    post:
+      summary: Verify user email (admin)
+      tags:
+        - Admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+              properties:
+                id:
+                  type: integer
+      responses:
+        '200':
+          description: User verified
+
+  /admin-update-user-paid:
+    post:
+      summary: Update user paid status (admin)
+      tags:
+        - Admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+              properties:
+                id:
+                  type: integer
+                paid:
+                  type: integer
+                  enum: [0, 1]
+      responses:
+        '200':
+          description: Paid status updated
+
+  /admin-update-user-banned:
+    post:
+      summary: Ban/unban user (admin)
+      tags:
+        - Admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+              properties:
+                id:
+                  type: integer
+                banned:
+                  type: integer
+                  enum: [0, 1]
+      responses:
+        '200':
+          description: Ban status updated
+
+  /admin-update-user-tokens:
+    post:
+      summary: Update user token limit (admin)
+      tags:
+        - Admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+              properties:
+                id:
+                  type: integer
+                tokens:
+                  type: integer
+      responses:
+        '200':
+          description: Tokens updated
+
+  /admin-update-user-train-tokens:
+    post:
+      summary: Update user training token limit (admin)
+      tags:
+        - Admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+              properties:
+                id:
+                  type: integer
+                tokens:
+                  type: integer
+      responses:
+        '200':
+          description: Training tokens updated
+
+  /admin-get-token-stats:
+    post:
+      summary: Get token usage statistics (admin)
+      tags:
+        - Admin
+      responses:
+        '200':
+          description: Statistics retrieved
+
+  /admin-get-user-count:
+    post:
+      summary: Get user count for organization (admin)
+      tags:
+        - Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                paid:
+                  type: boolean
+                hide_banned:
+                  type: boolean
+      responses:
+        '200':
+          description: User count retrieved
+
+  /admin-get-all-users-with-tokens:
+    post:
+      summary: Get all organization users with token info (admin)
+      tags:
+        - Admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full:
+                  type: boolean
+                start:
+                  type: integer
+                limit:
+                  type: integer
+                  default: 500
+                email:
+                  type: string
+                sort_by:
+                  type: string
+                  enum: [id, organization_id, type, first_name, last_name, phone, email, company, paid, max_tokens, max_train_tokens, banned, email_verified, country, mfa_secret, x509_cn]
+                sort_direction:
+                  type: string
+                  enum: [asc, desc]
+      responses:
+        '200':
+          description: Users retrieved
+
+  /admin-get-all-logs:
+    post:
+      summary: Get user logs (admin)
+      tags:
+        - Admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - user_id
+              properties:
+                user_id:
+                  type: integer
+      responses:
+        '200':
+          description: Logs retrieved
+
+  # Superadmin Endpoints
+  /superadmin-get-all-users-with-tokens:
+    post:
+      summary: Get all users with token info (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full:
+                  type: boolean
+                paid:
+                  type: boolean
+                start:
+                  type: integer
+                limit:
+                  type: integer
+                  default: 100
+                hide_banned:
+                  type: boolean
+                email:
+                  type: string
+                organization_id:
+                  type: integer
+                sort_by:
+                  type: string
+                sort_direction:
+                  type: string
+      responses:
+        '200':
+          description: Users retrieved
+
+  /superadmin-export-users-csv:
+    post:
+      summary: Export all users to CSV (superadmin)
+      tags:
+        - Superadmin
+      responses:
+        '200':
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /superadmin-get-users:
+    post:
+      summary: Get users (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                start:
+                  type: integer
+                limit:
+                  type: integer
+                email:
+                  type: string
+      responses:
+        '200':
+          description: Users retrieved
+
+  /superadmin-get-user-count:
+    post:
+      summary: Get total user count (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                paid:
+                  type: boolean
+                hide_banned:
+                  type: boolean
+                organization_id:
+                  type: integer
+      responses:
+        '200':
+          description: User count retrieved
+
+  /superadmin-get-stats:
+    post:
+      summary: Get system statistics (superadmin)
+      tags:
+        - Superadmin
+      responses:
+        '200':
+          description: Statistics retrieved
+
+  /superadmin-get-token-stats:
+    post:
+      summary: Get token usage statistics (superadmin)
+      tags:
+        - Superadmin
+      responses:
+        '200':
+          description: Token statistics retrieved
+
+  /superadmin-get-all-logs:
+    post:
+      summary: Get system logs (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+                limit:
+                  type: integer
+                  default: 100
+      responses:
+        '200':
+          description: Logs retrieved
+
+  /superadmin-update-user-verified:
+    post:
+      summary: Verify user email (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: integer
+                email:
+                  type: string
+      responses:
+        '200':
+          description: User verified
+
+  /superadmin-update-user-banned:
+    post:
+      summary: Ban/unban user (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: integer
+                email:
+                  type: string
+                banned:
+                  type: integer
+                  enum: [0, 1]
+      responses:
+        '200':
+          description: Ban status updated
+
+  /superadmin-update-user-paid:
+    post:
+      summary: Update user paid status (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: integer
+                email:
+                  type: string
+                paid:
+                  type: integer
+                  enum: [0, 1]
+                testing:
+                  type: integer
+                  enum: [0, 1]
+      responses:
+        '200':
+          description: Paid status updated
+
+  /superadmin-update-user-admin:
+    post:
+      summary: Grant/revoke admin privileges (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: integer
+                email:
+                  type: string
+                admin:
+                  type: integer
+                  enum: [0, 1]
+      responses:
+        '200':
+          description: Admin status updated
+
+  /superadmin-update-user-tokens:
+    post:
+      summary: Update user token limit (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: integer
+                email:
+                  type: string
+                tokens:
+                  type: integer
+      responses:
+        '200':
+          description: Tokens updated
+
+  /superadmin-update-user-train-tokens:
+    post:
+      summary: Update user training token limit (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: integer
+                email:
+                  type: string
+                tokens:
+                  type: integer
+      responses:
+        '200':
+          description: Training tokens updated
+
+  /superadmin-change-email:
+    post:
+      summary: Change user email (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - old_email
+                - new_email
+              properties:
+                old_email:
+                  type: string
+                  format: email
+                new_email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Email changed
+
+  /superadmin-assign-payer:
+    post:
+      summary: Assign payer email to user (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - user_email
+                - payer_email
+              properties:
+                user_email:
+                  type: string
+                  format: email
+                payer_email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Payer assigned
+
+  /superadmin-deassign-organization:
+    post:
+      summary: Remove user from organization (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - user_email
+              properties:
+                user_email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Organization removed
+
+  /superadmin-cuimfa:
+    post:
+      summary: Enable/disable CUI MFA authorization (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - user_email
+                - enable
+              properties:
+                user_email:
+                  type: string
+                  format: email
+                enable:
+                  type: integer
+                  enum: [0, 1]
+      responses:
+        '200':
+          description: CUI MFA status updated
+
+  /superadmin-delete-last-chatsession:
+    post:
+      summary: Delete user's last chat session (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Chat session deleted
+
+  /superadmin-reset-mfa:
+    post:
+      summary: Reset user MFA (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: MFA reset
+
+  /superadmin-reset-cac:
+    post:
+      summary: Reset user CAC (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: CAC reset
+
+  /superadmin-reset-pw:
+    post:
+      summary: Reset user password (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  new_password:
+                    type: string
+                  status:
+                    type: integer
+
+  /superadmin-assign-dataset:
+    post:
+      summary: Assign dataset to user (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - dataset
+                - email
+              properties:
+                dataset:
+                  type: string
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Dataset assigned
+
+  /superadmin-deassign-dataset:
+    post:
+      summary: Remove dataset from user (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - dataset
+                - email
+              properties:
+                dataset:
+                  type: string
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Dataset removed
+
+  /superadmin-get-dataset:
+    post:
+      summary: Get user datasets (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Datasets retrieved
+
+  /superadmin-delete-all-dataset:
+    post:
+      summary: Delete dataset from all users (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - dataset
+              properties:
+                dataset:
+                  type: string
+      responses:
+        '200':
+          description: Dataset deleted
+
+  /superadmin-assign-persona:
+    post:
+      summary: Assign persona to user (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - persona_id
+              properties:
+                email:
+                  type: string
+                  format: email
+                persona_id:
+                  type: integer
+      responses:
+        '200':
+          description: Persona assigned
+
+  /superadmin-assign-plugin:
+    post:
+      summary: Assign plugin to user (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - plugin_name
+              properties:
+                email:
+                  type: string
+                  format: email
+                plugin_name:
+                  type: string
+                  pattern: '^[A-Za-z_]+$'
+      responses:
+        '200':
+          description: Plugin assigned
+
+  /superadmin-get-user-api-keys:
+    post:
+      summary: Get user API keys (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: integer
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: API keys retrieved
+
+  /superadmin-user-api-key:
+    post:
+      summary: Create API key for user (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: integer
+                email:
+                  type: string
+                  format: email
+                name:
+                  type: string
+                  default: default
+      responses:
+        '200':
+          description: API key created
+
+  # Organization Management (Superadmin)
+  /superadmin-get-all-organizations:
+    post:
+      summary: Get all organizations (superadmin)
+      tags:
+        - Superadmin
+      responses:
+        '200':
+          description: Organizations retrieved
+
+  /superadmin-add-organization:
+    post:
+      summary: Add new organization (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - point_contact
+                - country
+                - email
+              properties:
+                name:
+                  type: string
+                point_contact:
+                  type: string
+                address:
+                  type: string
+                zip:
+                  type: string
+                city:
+                  type: string
+                country:
+                  type: string
+                phone:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                domainname:
+                  type: string
+                force_models:
+                  type: string
+      responses:
+        '200':
+          description: Organization added
+
+  /superadmin-update-organization/{organization_id}:
+    put:
+      summary: Update organization (superadmin)
+      tags:
+        - Superadmin
+      parameters:
+        - in: path
+          name: organization_id
+          schema:
+            type: integer
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Organization'
+      responses:
+        '200':
+          description: Organization updated
+
+  /superadmin-get-organization/{organization_id}:
+    get:
+      summary: Get organization details (superadmin)
+      tags:
+        - Superadmin
+      parameters:
+        - in: path
+          name: organization_id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: Organization retrieved
+
+  /superadmin-assign-users-to-organization:
+    post:
+      summary: Assign users to organization (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - organization_id
+                - emails
+              properties:
+                organization_id:
+                  type: integer
+                emails:
+                  type: array
+                  items:
+                    type: string
+                    format: email
+      responses:
+        '200':
+          description: Users assigned
+
+  /superadmin-add-organization-purchase:
+    post:
+      summary: Add organization purchase (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - date_purchase
+                - email_payer
+                - total_tokens
+                - total_training_tokens
+                - expiration
+                - organization_id
+              properties:
+                date_purchase:
+                  type: string
+                  format: date
+                email_payer:
+                  type: string
+                  format: email
+                payer_comment:
+                  type: string
+                total_tokens:
+                  type: integer
+                total_training_tokens:
+                  type: integer
+                expiration:
+                  type: string
+                  format: date
+                organization_id:
+                  type: integer
+      responses:
+        '200':
+          description: Purchase added
+
+  /superadmin-update-organization-purchase/{purchase_id}:
+    put:
+      summary: Update organization purchase (superadmin)
+      tags:
+        - Superadmin
+      parameters:
+        - in: path
+          name: purchase_id
+          schema:
+            type: integer
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationPurchase'
+      responses:
+        '200':
+          description: Purchase updated
+
+  /superadmin-get-organization-purchases/{organization_id}:
+    post:
+      summary: Get organization purchases (superadmin)
+      tags:
+        - Superadmin
+      parameters:
+        - in: path
+          name: organization_id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: Purchases retrieved
+
+  /superadmin-update-sales:
+    post:
+      summary: Import sales data from Excel (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Excel file with organizations, organization_purchases, and users sheets
+      responses:
+        '200':
+          description: Sales data imported
+
+  /superadmin-export-weekly-reports:
+    post:
+      summary: Export weekly organization report (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                monthly:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: CSV report generated
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /superadmin-export-weekly-model-usage-csv:
+    post:
+      summary: Export model usage report (superadmin)
+      tags:
+        - Superadmin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                monthly:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: CSV report generated
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  # System Endpoints
+  /get-headers:
+    get:
+      summary: Debug endpoint to view request headers
+      tags:
+        - System
+      security: []
+      responses:
+        '200':
+          description: Headers displayed
+
+tags:
+  - name: Authentication
+    description: User authentication and authorization
+  - name: User Management
+    description: User profile and settings management
+  - name: Chat Management
+    description: Chat session operations
+  - name: Dataset Management
+    description: Dataset operations and permissions
+  - name: API Key Management
+    description: API key operations
+  - name: Billing
+    description: Subscription and payment operations
+  - name: User Information
+    description: User data and logs
+  - name: Organization
+    description: Organization management
+  - name: Admin
+    description: Admin operations for organization management
+  - name: Superadmin
+    description: Superadmin system operations
+  - name: System
+    description: System utilities and health checks
